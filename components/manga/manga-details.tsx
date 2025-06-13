@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Chapter } from '@/lib/mangadex-api'
+import { Chapter } from '@/lib/mangadx-api'
 import { KitsuManga } from '@/lib/kitsu-api'
-import { Star, Calendar, User, Book, List, ChevronDown, BookOpen, Share2, Bookmark as BookmarkIcon } from 'lucide-react'
+import { Star, Calendar, User, Book, List, ChevronDown, BookOpen, Share2, Bookmark as BookmarkIcon, Download } from 'lucide-react'
 import { useBookmark } from '@/hooks/useBookmark'
+import { toast } from 'sonner'
 
 interface MangaDetailsProps {
   kitsuManga: KitsuManga | null
@@ -43,8 +43,51 @@ function Synopsis({ description, genres }: { description: string; genres: string
   )
 }
 
-function ChapterList({ chapters, mangaSlug }: { chapters: Chapter[]; mangaSlug: string }) {
+function ChapterList({ chapters, mangaSlug, mangaTitle }: { chapters: Chapter[]; mangaSlug: string; mangaTitle: string }) {
   const [visibleChapters, setVisibleChapters] = useState(50)
+
+  const handleDownloadChapter = async (chapter: Chapter) => {
+    try {
+      // Get chapter pages
+      const response = await fetch(`/api/proxy/mangadx/at-home/server/${chapter.id}`)
+      const pagesData = await response.json()
+      
+      if (!pagesData.chapter?.data) {
+        toast.error('Failed to get chapter pages')
+        return
+      }
+
+      const baseUrl = pagesData.baseUrl
+      const chapterHash = pagesData.chapter.hash
+      const pages = pagesData.chapter.data
+
+      // Create download data
+      const downloadData = {
+        id: `${mangaSlug}-${chapter.id}`,
+        mangaId: mangaSlug,
+        mangaTitle: mangaTitle,
+        mangaSlug: mangaSlug,
+        chapterId: chapter.id,
+        chapterNumber: chapter.attributes.chapter || "Unknown",
+        chapterTitle: chapter.attributes.title || "",
+        posterUrl: "/placeholder.svg",
+        pages: pages.map((page: string) => `${baseUrl}/data/${chapterHash}/${page}`),
+        downloadedAt: new Date().toISOString(),
+        size: pages.length * 500000 // Estimate 500KB per page
+      }
+
+      // Save to localStorage
+      const existingDownloads = JSON.parse(localStorage.getItem('manga_downloads') || '[]')
+      const updatedDownloads = existingDownloads.filter((d: any) => d.id !== downloadData.id)
+      updatedDownloads.push(downloadData)
+      
+      localStorage.setItem('manga_downloads', JSON.stringify(updatedDownloads))
+      toast.success(`Chapter ${chapter.attributes.chapter} downloaded for offline reading!`)
+    } catch (error) {
+      console.error('Error downloading chapter:', error)
+      toast.error('Failed to download chapter')
+    }
+  }
 
   if (chapters.length === 0) {
     return (
@@ -58,13 +101,25 @@ function ChapterList({ chapters, mangaSlug }: { chapters: Chapter[]; mangaSlug: 
 
   return (
     <div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {chapters.slice(0, visibleChapters).map(chapter => (
-          <Button key={chapter.id} variant="outline" asChild className="justify-start border-gray-700 hover:bg-gray-800 hover:border-red-500">
-            <Link href={`/reader/${mangaSlug}/${chapter.id}`}>
-              <span className="truncate">Chapter {chapter.attributes.chapter}: {chapter.attributes.title || 'No title'}</span>
-            </Link>
-          </Button>
+          <div key={chapter.id} className="flex items-center gap-3 p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition-colors">
+            <Button variant="outline" asChild className="flex-1 justify-start border-gray-700 hover:bg-gray-800 hover:border-red-500">
+              <Link href={`/reader/${mangaSlug}/${chapter.id}`}>
+                <BookOpen className="w-4 h-4 mr-2" />
+                <span className="truncate">Chapter {chapter.attributes.chapter}: {chapter.attributes.title || 'No title'}</span>
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleDownloadChapter(chapter)}
+              className="text-gray-400 hover:text-blue-400 hover:bg-blue-500/10"
+              title="Download for offline reading"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          </div>
         ))}
       </div>
       {chapters.length > visibleChapters && (
@@ -83,13 +138,13 @@ export default function MangaDetails({ kitsuManga, chapters, mangaSlug }: MangaD
   const [isExpanded, setIsExpanded] = useState(false)
   const firstChapterId = chapters[0]?.id
   
-  const { isBookmarked, isLoading: isBookmarkLoading, toggleBookmark } = useBookmark(kitsuManga?.id)
+  const { isBookmarked, isLoading: isBookmarkLoading, toggleBookmark } = useBookmark(mangaSlug)
   
   const handleBookmarkToggle = async () => {
     if (!kitsuManga) return
     
     const bookmarkData = {
-      id: kitsuManga.id,
+      id: mangaSlug,
       title: kitsuManga.attributes.canonicalTitle || kitsuManga.attributes.titles.en_jp || 'Unknown Title',
       slug: mangaSlug,
       posterUrl: kitsuManga.attributes.posterImage?.original || kitsuManga.attributes.posterImage?.medium || '',
@@ -98,6 +153,7 @@ export default function MangaDetails({ kitsuManga, chapters, mangaSlug }: MangaD
     
     await toggleBookmark(bookmarkData)
   }
+
   const title = kitsuManga?.attributes.canonicalTitle || kitsuManga?.attributes.titles.en_jp || "Unknown Title"
   const altTitle = kitsuManga?.attributes.titles.en_jp
   const description = kitsuManga?.attributes.description || 'No description available.'
@@ -205,7 +261,7 @@ export default function MangaDetails({ kitsuManga, chapters, mangaSlug }: MangaD
 
       <div>
         <h2 className="text-2xl font-bold mb-4 border-b-2 border-gray-700 pb-2">Chapters ({chapters.length})</h2>
-        <ChapterList chapters={chapters} mangaSlug={mangaSlug} />
+        <ChapterList chapters={chapters} mangaSlug={mangaSlug} mangaTitle={title} />
       </div>
     </div>
   )

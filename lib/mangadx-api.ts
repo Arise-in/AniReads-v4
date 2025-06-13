@@ -399,3 +399,17 @@ export async function getMangaDxTrendingWithKitsuPosters(limit = 20) {
     return []
   }
 }
+
+// New function to search manga by title and return MangaDx ID
+export async function findMangaDxIdByTitle(title: string): Promise<string | null> {
+  try {
+    const searchResults = await searchMangaDxManga(title, 1)
+    if (searchResults.data && searchResults.data.length > 0) {
+      return searchResults.data[0].id
+    }
+    return null
+  } catch (error) {
+    console.error('Error finding MangaDx ID by title:', error)
+    return null
+  }
+}

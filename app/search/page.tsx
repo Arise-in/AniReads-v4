@@ -14,11 +14,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Separator } from "@/components/ui/separator"
 import { Card, CardContent } from "@/components/ui/card"
-import { searchMangaDexManga, type Manga } from "@/lib/mangadex-api"
+import { searchMangaDxManga, type Manga } from "@/lib/mangadx-api"
 import { searchKitsuManga, getKitsuPosterImage, type KitsuManga } from "@/lib/kitsu-api"
 import LoadingSpinner from "@/components/loading-spinner"
 import { useDebounce } from "@/hooks/use-debounce"
-import { slugify } from "@/lib/slugify"
 import MangaCard from "@/components/manga-card"
 
 interface SearchResultManga extends Manga {
@@ -132,12 +131,12 @@ export default function SearchPage() {
     setLoading(true)
     try {
       const offset = (currentPage - 1) * 20
-      const mangadexData = await searchMangaDexManga(query, 20, offset)
-      const mangadexMangaList = mangadexData.data || []
-      setTotalResults(mangadexData.total || 0)
+      const mangadxData = await searchMangaDxManga(query, 20, offset)
+      const mangadxMangaList = mangadxData.data || []
+      setTotalResults(mangadxData.total || 0)
 
       const enrichedResults = await Promise.all(
-        mangadexMangaList.map(async (mdManga) => {
+        mangadxMangaList.map(async (mdManga) => {
           const mdTitle =
             mdManga.attributes.title?.en || mdManga.attributes.title?.[Object.keys(mdManga.attributes.title)[0]] || ""
           let kitsuPosterUrl: string | undefined
@@ -546,12 +545,6 @@ export default function SearchPage() {
                       manga.attributes.title?.[Object.keys(manga.attributes.title)[0]] ||
                       "Unknown Title"
 
-                    const titleForSlug =
-                      manga.kitsuManga?.attributes.canonicalTitle ||
-                      manga.kitsuManga?.attributes.titles.en_jp ||
-                      mdTitle
-                    const mangaSlug = slugify(titleForSlug)
-
                     const posterUrl = manga.kitsuPosterUrl || "/placeholder.svg?height=300&width=225"
 
                     const genres = manga.attributes.tags
@@ -572,11 +565,12 @@ export default function SearchPage() {
                           key={manga.id}
                           id={manga.id}
                           title={mdTitle}
-                          slug={mangaSlug}
                           posterUrl={posterUrl}
                           rating={rating}
                           status={manga.attributes.status}
                           genres={genres}
+                          year={manga.attributes.year || undefined}
+                          contentRating={manga.attributes.contentRating}
                         />
                       )
                     }

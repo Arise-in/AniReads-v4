@@ -11,7 +11,7 @@ import QuickAddDialog from '@/components/library/quick-add-dialog'
 interface MangaCardProps {
   id: string
   title: string
-  slug: string
+  slug?: string
   posterUrl: string
   coverUrl?: string
   description?: string
@@ -21,7 +21,7 @@ interface MangaCardProps {
   contentRating?: string
   showAddButton?: boolean
   className?: string
-  useMangaDxId?: boolean // New prop to determine if we should use MangaDx ID for routing
+  genres?: string[]
 }
 
 export default function MangaCard({
@@ -37,18 +37,18 @@ export default function MangaCard({
   contentRating,
   showAddButton = true,
   className = '',
-  useMangaDxId = false
+  genres = []
 }: MangaCardProps) {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
 
-  // Use MangaDx ID for routing if specified, otherwise use slug
-  const linkHref = useMangaDxId ? `/manga/${id}` : `/manga/${slug}`
+  // Always use MangaDx ID for routing
+  const linkHref = `/manga/${id}`
 
   const mangaData = {
     manga_id: id,
     manga_title: title,
-    manga_slug: useMangaDxId ? id : slug, // Use ID as slug for consistency
+    manga_slug: id, // Use MangaDx ID as slug for consistency
     poster_url: posterUrl,
     cover_url: coverUrl,
     description: description,
@@ -253,6 +253,21 @@ export default function MangaCard({
                   <p className="text-sm text-slate-300 line-clamp-2 leading-relaxed group-hover:text-slate-200 transition-colors duration-500 font-medium">
                     {description}
                   </p>
+                )}
+
+                {/* Genres */}
+                {genres.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {genres.slice(0, 2).map((genre) => (
+                      <Badge
+                        key={genre}
+                        variant="secondary"
+                        className="bg-gray-700/50 text-gray-300 text-xs"
+                      >
+                        {genre}
+                      </Badge>
+                    ))}
+                  </div>
                 )}
               </div>
               

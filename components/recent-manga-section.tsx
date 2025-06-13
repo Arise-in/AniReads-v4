@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Clock } from "lucide-react"
 import { getMangaDxRecentWithKitsuPosters } from "@/lib/mangadx-api"
-import { slugify } from "@/lib/slugify"
 import MangaCard from "@/components/manga-card"
 
 interface MangaWithKitsuPoster {
@@ -14,6 +13,12 @@ interface MangaWithKitsuPoster {
     status: string
     year?: number
     contentRating: string
+    tags: Array<{
+      attributes: {
+        name: Record<string, string>
+        group: string
+      }
+    }>
   }
   kitsuPoster: string
   relationships: Array<{
@@ -78,7 +83,6 @@ export default function RecentMangaSection() {
           const title = Object.values(item.attributes.title)[0] || "Unknown Title"
           const posterUrl = item.kitsuPoster || "/placeholder.svg"
           const description = Object.values(item.attributes.description)[0] || ""
-          const mangaSlug = slugify(title)
           
           // Get cover art if available
           const coverArt = item.relationships.find(
@@ -88,19 +92,24 @@ export default function RecentMangaSection() {
             ? `https://uploads.mangadx.org/covers/${item.id}/${coverArt.attributes?.fileName}.256.jpg`
             : ''
 
+          // Extract genres
+          const genres = item.attributes.tags
+            .filter((tag: any) => tag.attributes.group === "genre")
+            .map((tag: any) => tag.attributes.name?.en || Object.values(tag.attributes.name)[0])
+            .filter(Boolean)
+
           return (
             <MangaCard
               key={item.id}
               id={item.id}
               title={title}
-              slug={mangaSlug}
               posterUrl={posterUrl}
               coverUrl={coverUrl}
               description={description}
               status={item.attributes.status}
               year={item.attributes.year}
               contentRating={item.attributes.contentRating}
-              useMangaDxId={true} // Use MangaDx ID for routing
+              genres={genres}
             />
           )
         })}

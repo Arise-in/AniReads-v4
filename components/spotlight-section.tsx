@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import Image from "next/image"
-import { getMangaDexTrendingWithKitsuPosters } from "@/lib/mangadex-api"
-import { slugify } from "@/lib/slugify"
+import { getMangaDxTrendingWithKitsuPosters } from "@/lib/mangadx-api"
 
 export default function SpotlightSection() {
   const [spotlightManga, setSpotlightManga] = useState<any[]>([])
@@ -17,7 +16,7 @@ export default function SpotlightSection() {
   useEffect(() => {
     const fetchSpotlightManga = async () => {
       try {
-        const data = await getMangaDexTrendingWithKitsuPosters(10)
+        const data = await getMangaDxTrendingWithKitsuPosters(10)
         setSpotlightManga(data || [])
       } catch (error) {
         console.error("Error fetching spotlight manga:", error)
@@ -68,11 +67,14 @@ export default function SpotlightSection() {
   const title = currentManga.attributes.title.en || Object.values(currentManga.attributes.title)[0] || "Unknown Title"
   const description = currentManga.attributes.description?.en || Object.values(currentManga.attributes.description)[0] || "No description available."
   const coverArt = currentManga.relationships.find((rel: any) => rel.type === 'cover_art' && rel.attributes?.fileName)
-  const coverUrl = coverArt ? `https://uploads.mangadex.org/covers/${currentManga.id}/${coverArt.attributes?.fileName}.512.jpg` : "/placeholder.svg?height=600&width=1200"
+  const coverUrl = coverArt ? `https://uploads.mangadx.org/covers/${currentManga.id}/${coverArt.attributes?.fileName}.512.jpg` : "/placeholder.svg?height=600&width=1200"
   const posterUrl = currentManga.kitsuPoster || "/placeholder.svg"
-  const mangaSlug = slugify(title)
   const genres: string[] = Array.isArray(currentManga.attributes.tags)
-    ? currentManga.attributes.tags.map((tag: any) => tag?.attributes?.name?.en || '').filter(Boolean).slice(0, 4)
+    ? currentManga.attributes.tags
+        .filter((tag: any) => tag.attributes.group === "genre")
+        .map((tag: any) => tag?.attributes?.name?.en || Object.values(tag?.attributes?.name || {})[0] || '')
+        .filter(Boolean)
+        .slice(0, 4)
     : [];
   const contentRating = currentManga.attributes.contentRating
 
@@ -164,7 +166,7 @@ export default function SpotlightSection() {
               </div>
 
               <div className="flex flex-wrap gap-4">
-                <Link href={`/manga/${mangaSlug}`}>
+                <Link href={`/manga/${currentManga.id}`}>
                   <Button className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white px-8 py-3 text-lg font-semibold rounded-xl shadow-lg hover:shadow-red-500/25 transition-all duration-300">
                     <BookOpen className="w-5 h-5 mr-2" />
                     Read Now

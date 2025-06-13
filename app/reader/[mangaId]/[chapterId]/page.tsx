@@ -25,12 +25,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import Image from "next/image"
-import { getKitsuMangaBySlug, type KitsuManga } from "@/lib/kitsu-api"
+import { searchKitsuManga, type KitsuManga } from "@/lib/kitsu-api"
 import {
-  searchMangaDexManga,
-  getMangaDexChapter,
-  getMangaDexChapterPages,
-  getMangaDexChapters,
+  getMangaDxManga,
+  getMangaDxChapter,
+  getMangaDxChapterPages,
+  getMangaDxChapters,
   type Chapter,
 } from "@/lib/mangadx-api"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -83,14 +83,14 @@ export default function ReaderPage() {
   const [mangaTitle, setMangaTitle] = useState("Loading...")
   const [chapterTitle, setChapterTitle] = useState("Loading...")
   const [kitsuManga, setKitsuManga] = useState<KitsuManga | null>(null)
-  const [allMangaDexChapters, setAllMangaDexChapters] = useState<Chapter[]>([])
-  const [currentMangaDexChapter, setCurrentMangaDexChapter] = useState<Chapter | null>(null)
-  const [mangadexMangaId, setMangadexMangaId] = useState<string | null>(null)
+  const [allMangaDxChapters, setAllMangaDxChapters] = useState<Chapter[]>([])
+  const [currentMangaDxChapter, setCurrentMangaDxChapter] = useState<Chapter | null>(null)
 
   const loadingStates = useRef<Set<number>>(new Set())
   const readerRef = useRef<HTMLDivElement>(null)
 
-  const mangaSlug = params.mangaId as string
+  // Both mangaId and chapterId are now MangaDx IDs
+  const mangaDxId = params.mangaId as string
   const chapterId = params.chapterId as string
 
   const hideControlsAfterDelay = useCallback(() => {
@@ -168,20 +168,20 @@ export default function ReaderPage() {
   // Save reading progress to cache
   const saveReadingProgress = useCallback((page: number) => {
     const readingHistory = JSON.parse(localStorage.getItem("readingHistory") || "{}")
-    readingHistory[mangaSlug] = {
+    readingHistory[mangaDxId] = {
       lastTime: new Date().toISOString(),
-      mangaId: mangadexMangaId || mangaSlug,
-      mangaSlug: mangaSlug,
+      mangaId: mangaDxId,
+      mangaSlug: mangaDxId,
       mangaTitle: mangaTitle,
       chapterId: chapterId,
-      chapter: currentMangaDexChapter?.attributes?.chapter || "Unknown",
+      chapter: currentMangaDxChapter?.attributes?.chapter || "Unknown",
       page: page,
       totalPages: totalPages,
       posterUrl: kitsuManga?.attributes?.posterImage?.medium || kitsuManga?.attributes?.posterImage?.small,
       lastRead: new Date().toISOString()
     }
     localStorage.setItem("readingHistory", JSON.stringify(readingHistory))
-  }, [mangaSlug, mangadexMangaId, mangaTitle, chapterId, currentMangaDexChapter, totalPages, kitsuManga])
+  }, [mangaDxId, mangaTitle, chapterId, currentMangaDxChapter, totalPages, kitsuManga])
 
   // Check for offline content first
   const checkOfflineContent = useCallback(() => {
@@ -198,7 +198,7 @@ export default function ReaderPage() {
         
         // Load saved progress
         const readingHistory = JSON.parse(localStorage.getItem("readingHistory") || "{}")
-        const savedProgress = readingHistory[mangaSlug]
+        const savedProgress = readingHistory[mangaDxId]
         let initialPage = 1
         if (savedProgress && savedProgress.chapterId === chapterId && savedProgress.page) {
           initialPage = Math.min(savedProgress.page, offlineChapter.pages.length)
@@ -211,7 +211,7 @@ export default function ReaderPage() {
       console.error('Error checking offline content:', error)
     }
     return false
-  }, [chapterId, mangaSlug])
+  }, [chapterId, mangaDxId])
 
   useEffect(() => {
     const fetchReaderData = async () => {
@@ -225,101 +225,79 @@ export default function ReaderPage() {
           return
         }
 
-        // Try to get manga by MangaDex ID first (if slug is actually an ID)
-        let kitsuData: KitsuManga | null = null
-        let mangadexId = mangaSlug
+        console.log("ReaderPage: Fetching data for MangaDx ID:", mangaDxId, "Chapter ID:", chapterId)
 
-        // Check if mangaSlug is actually a MangaDx ID (UUID format)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        // Get MangaDx manga details
+        const mangaDxResponse = await getMangaDxManga(mangaDxId)
+        const mdManga = mangaDxResponse.data
         
-        if (uuidRegex.test(mangaSlug)) {
-          // It's a MangaDx ID, get manga details directly
+        if (mdManga) {
+          const mdTitle = mdManga.attributes.title?.en || Object.values(mdManga.attributes.title)[0] || ""
+          setMangaTitle(mdTitle)
+          
+          // Search Kitsu for additional metadata
           try {
-            const mangadexResponse = await getMangaDexManga(mangaSlug)
-            const mdManga = mangadexResponse.data
-            if (mdManga) {
-              const mdTitle = mdManga.attributes.title?.en || Object.values(mdManga.attributes.title)[0] || ""
-              setMangaTitle(mdTitle)
-              
-              // Search Kitsu for additional metadata
-              const kitsuSearchData = await searchKitsuManga(mdTitle, 1)
-              kitsuData = kitsuSearchData.data[0] || null
-            }
+            const kitsuSearchData = await searchKitsuManga(mdTitle, 1)
+            const kitsuData = kitsuSearchData.data[0] || null
+            setKitsuManga(kitsuData)
           } catch (error) {
-            console.error('Error fetching MangaDx manga by ID:', error)
-          }
-        } else {
-          // It's a slug, try Kitsu first then find MangaDx ID
-          kitsuData = await getKitsuMangaBySlug(mangaSlug)
-          if (kitsuData) {
-            setMangaTitle(kitsuData.attributes.canonicalTitle || kitsuData.attributes.titles.en_jp || "Unknown Manga")
-            
-            const mangadexSearch = await searchMangaDexManga(kitsuData.attributes.canonicalTitle, 1)
-            const foundMangadexManga = mangadexSearch.data[0]
-            if (foundMangadexManga) {
-              mangadexId = foundMangadexManga.id
-            }
+            console.warn("ReaderPage: Could not fetch Kitsu data:", error)
           }
         }
 
-        setKitsuManga(kitsuData)
-        setMangadexMangaId(mangadexId)
+        // Get all chapters for navigation
+        const allChaptersData = await getMangaDxChapters(mangaDxId, 100)
+        const sortedChapters = (allChaptersData.data || []).sort((a, b) => {
+          const aNum = Number.parseFloat(a.attributes.chapter || "0")
+          const bNum = Number.parseFloat(b.attributes.chapter || "0")
+          const aVol = Number.parseFloat(a.attributes.volume || "0")
+          const bVol = Number.parseFloat(b.attributes.volume || "0")
 
-        if (mangadexId) {
-          const allChaptersData = await getMangaDexChapters(mangadexId, 100)
-          const sortedChapters = (allChaptersData.data || []).sort((a, b) => {
-            const aNum = Number.parseFloat(a.attributes.chapter || "0")
-            const bNum = Number.parseFloat(b.attributes.chapter || "0")
-            const aVol = Number.parseFloat(a.attributes.volume || "0")
-            const bVol = Number.parseFloat(b.attributes.volume || "0")
-
-            if (aVol !== bVol) {
-              return aVol - bVol
-            }
-            return aNum - bNum
-          })
-          setAllMangaDexChapters(sortedChapters)
-
-          const currentChapterDetails = await getMangaDexChapter(chapterId)
-          setCurrentMangaDexChapter(currentChapterDetails.data)
-          setChapterTitle(
-            `Chapter ${currentChapterDetails.data?.attributes?.chapter || "?"}${
-              currentChapterDetails.data?.attributes?.title ? `: ${currentChapterDetails.data.attributes.title}` : ""
-            }`,
-          )
-
-          const pagesResponse = await getMangaDexChapterPages(chapterId)
-          const baseUrl = pagesResponse.baseUrl
-          const chapterData = pagesResponse.chapter
-
-          if (!chapterData || !chapterData.hash || !chapterData.data) {
-            console.error("MangaDx chapter data, hash, or image list is missing:", chapterData)
-            setImageUrls([])
-            setTotalPages(0)
-            setLoading(false)
-            return
+          if (aVol !== bVol) {
+            return aVol - bVol
           }
+          return aNum - bNum
+        })
+        setAllMangaDxChapters(sortedChapters)
 
-          const rawPageUrls = chapterData.data.map((page: string) => `${baseUrl}/data/${chapterData.hash}/${page}`)
-          setImageUrls(rawPageUrls)
-          setTotalPages(rawPageUrls.length)
+        // Get current chapter details
+        const currentChapterDetails = await getMangaDxChapter(chapterId)
+        setCurrentMangaDxChapter(currentChapterDetails.data)
+        setChapterTitle(
+          `Chapter ${currentChapterDetails.data?.attributes?.chapter || "?"}${
+            currentChapterDetails.data?.attributes?.title ? `: ${currentChapterDetails.data.attributes.title}` : ""
+          }`,
+        )
 
-          const readingHistory = JSON.parse(localStorage.getItem("readingHistory") || "{}")
-          const savedProgress = readingHistory[mangaSlug]
-          let initialPage = 1
+        // Get chapter pages
+        const pagesResponse = await getMangaDxChapterPages(chapterId)
+        const baseUrl = pagesResponse.baseUrl
+        const chapterData = pagesResponse.chapter
 
-          if (savedProgress && savedProgress.chapterId === chapterId && savedProgress.page) {
-            initialPage = Math.min(savedProgress.page, rawPageUrls.length)
-          }
-          setCurrentPage(initialPage)
-
-          // Save initial progress
-          saveReadingProgress(initialPage)
-        } else {
-          console.warn(`No MangaDx entry found for manga: ${mangaSlug}`)
+        if (!chapterData || !chapterData.hash || !chapterData.data) {
+          console.error("MangaDx chapter data, hash, or image list is missing:", chapterData)
           setImageUrls([])
           setTotalPages(0)
+          setLoading(false)
+          return
         }
+
+        const rawPageUrls = chapterData.data.map((page: string) => `${baseUrl}/data/${chapterData.hash}/${page}`)
+        setImageUrls(rawPageUrls)
+        setTotalPages(rawPageUrls.length)
+
+        const readingHistory = JSON.parse(localStorage.getItem("readingHistory") || "{}")
+        const savedProgress = readingHistory[mangaDxId]
+        let initialPage = 1
+
+        if (savedProgress && savedProgress.chapterId === chapterId && savedProgress.page) {
+          initialPage = Math.min(savedProgress.page, rawPageUrls.length)
+        }
+        setCurrentPage(initialPage)
+
+        // Save initial progress
+        saveReadingProgress(initialPage)
+
       } catch (error) {
         console.error("Error fetching reader data:", error)
         setImageUrls([])
@@ -329,7 +307,7 @@ export default function ReaderPage() {
       }
     }
 
-    if (mangaSlug && chapterId) {
+    if (mangaDxId && chapterId) {
       fetchReaderData()
     }
 
@@ -339,7 +317,7 @@ export default function ReaderPage() {
         clearTimeout(autoHideTimer.current)
       }
     }
-  }, [mangaSlug, chapterId, hideControlsAfterDelay, saveReadingProgress, checkOfflineContent])
+  }, [mangaDxId, chapterId, hideControlsAfterDelay, saveReadingProgress, checkOfflineContent])
 
   // Preload images based on current page
   useEffect(() => {
@@ -402,7 +380,7 @@ export default function ReaderPage() {
           }
           break
         case "Escape":
-          router.push(`/manga/${mangaSlug}`)
+          router.push(`/manga/${mangaDxId}`)
           break
         case "f":
         case "F11":
@@ -421,7 +399,7 @@ export default function ReaderPage() {
 
     window.addEventListener("keydown", handleKeyPress)
     return () => window.removeEventListener("keydown", handleKeyPress)
-  }, [currentPage, totalPages, router, showControlsTemporarily, mangaSlug, direction, readingMode, showControls, showSettings])
+  }, [currentPage, totalPages, router, showControlsTemporarily, mangaDxId, direction, readingMode, showControls, showSettings])
 
   const nextPage = () => {
     setPageTransition(true)
@@ -454,16 +432,16 @@ export default function ReaderPage() {
   }
 
   const goToNextChapter = () => {
-    const currentIndex = allMangaDexChapters.findIndex((c) => c.id === chapterId)
-    if (currentIndex !== -1 && currentIndex < allMangaDexChapters.length - 1) {
-      router.push(`/reader/${mangaSlug}/${allMangaDexChapters[currentIndex + 1].id}`)
+    const currentIndex = allMangaDxChapters.findIndex((c) => c.id === chapterId)
+    if (currentIndex !== -1 && currentIndex < allMangaDxChapters.length - 1) {
+      router.push(`/reader/${mangaDxId}/${allMangaDxChapters[currentIndex + 1].id}`)
     }
   }
 
   const goToPrevChapter = () => {
-    const currentIndex = allMangaDexChapters.findIndex((c) => c.id === chapterId)
+    const currentIndex = allMangaDxChapters.findIndex((c) => c.id === chapterId)
     if (currentIndex > 0) {
-      router.push(`/reader/${mangaSlug}/${allMangaDexChapters[currentIndex - 1].id}`)
+      router.push(`/reader/${mangaDxId}/${allMangaDxChapters[currentIndex - 1].id}`)
     }
   }
 
@@ -502,7 +480,7 @@ export default function ReaderPage() {
           const url = URL.createObjectURL(blob)
           const link = document.createElement("a")
           link.href = url
-          link.download = `${mangaTitle}_Chapter_${currentMangaDexChapter?.attributes.chapter}_Page_${currentPage}.png`
+          link.download = `${mangaTitle}_Chapter_${currentMangaDxChapter?.attributes.chapter}_Page_${currentPage}.png`
           document.body.appendChild(link)
           link.click()
           document.body.removeChild(link)
@@ -526,13 +504,13 @@ export default function ReaderPage() {
       const estimatedSize = imageUrls.length * 500000 // 500KB per page estimate
 
       const downloadData: DownloadedChapter = {
-        id: `${mangaSlug}-${chapterId}`,
-        mangaId: mangadexMangaId || mangaSlug,
+        id: `${mangaDxId}-${chapterId}`,
+        mangaId: mangaDxId,
         mangaTitle: mangaTitle,
-        mangaSlug: mangaSlug,
+        mangaSlug: mangaDxId,
         chapterId: chapterId,
-        chapterNumber: currentMangaDexChapter?.attributes?.chapter || "Unknown",
-        chapterTitle: currentMangaDexChapter?.attributes?.title || "",
+        chapterNumber: currentMangaDxChapter?.attributes?.chapter || "Unknown",
+        chapterTitle: currentMangaDxChapter?.attributes?.title || "",
         posterUrl: kitsuManga?.attributes?.posterImage?.medium || "/placeholder.svg",
         pages: imageUrls,
         downloadedAt: new Date().toISOString(),
@@ -604,7 +582,7 @@ export default function ReaderPage() {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-white">Chapter not found</h1>
-          <Button onClick={() => router.push(`/manga/${mangaSlug}`)} variant="outline">
+          <Button onClick={() => router.push(`/manga/${mangaDxId}`)} variant="outline">
             Go Back to Manga Details
           </Button>
         </div>
@@ -612,8 +590,8 @@ export default function ReaderPage() {
     )
   }
 
-  const canGoToPrevChapter = allMangaDexChapters.findIndex((c) => c.id === chapterId) > 0
-  const canGoToNextChapter = allMangaDexChapters.findIndex((c) => c.id === chapterId) < allMangaDexChapters.length - 1
+  const canGoToPrevChapter = allMangaDxChapters.findIndex((c) => c.id === chapterId) > 0
+  const canGoToNextChapter = allMangaDxChapters.findIndex((c) => c.id === chapterId) < allMangaDxChapters.length - 1
 
   return (
     <TooltipProvider>
@@ -652,7 +630,7 @@ export default function ReaderPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => router.push(`/manga/${mangaSlug}`)}
+                      onClick={() => router.push(`/manga/${mangaDxId}`)}
                       className="text-white hover:bg-gray-800"
                     >
                       <ArrowLeft className="w-4 h-4 mr-2" />

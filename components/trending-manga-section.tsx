@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getMangaDxTrendingWithKitsuPosters } from "@/lib/mangadx-api"
-import { slugify } from "@/lib/slugify"
 import MangaCard from "@/components/manga-card"
 
 interface MangaWithKitsuPoster {
@@ -15,6 +14,12 @@ interface MangaWithKitsuPoster {
     status: string
     year?: number
     contentRating: string
+    tags: Array<{
+      attributes: {
+        name: Record<string, string>
+        group: string
+      }
+    }>
   }
   kitsuPoster: string
   relationships: Array<{
@@ -35,9 +40,6 @@ export default function TrendingMangaSection() {
   useEffect(() => {
     const fetchManga = async () => {
       try {
-        // Log the MangaDx API URL
-        const apiUrl = "/api/proxy/mangadx/manga?limit=20&order[followedCount]=desc&includes[]=cover_art"
-        console.log("Trending MangaDx fetch URL:", apiUrl)
         const data = await getMangaDxTrendingWithKitsuPosters(20)
         setManga(data || [])
       } catch (error) {
@@ -108,11 +110,9 @@ export default function TrendingMangaSection() {
           className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
         >
           {manga.map((item) => {
-            // Always use the English title for slug if available, otherwise fallback to first available title
             const title = item.attributes.title.en || Object.values(item.attributes.title)[0] || "Unknown Title"
             const posterUrl = item.kitsuPoster || "/placeholder.svg"
             const description = item.attributes.description?.en || Object.values(item.attributes.description)[0] || ""
-            const mangaSlug = slugify(title)
             
             // Get cover art if available
             const coverArt = item.relationships.find(
@@ -122,19 +122,24 @@ export default function TrendingMangaSection() {
               ? `https://uploads.mangadx.org/covers/${item.id}/${coverArt.attributes?.fileName}.256.jpg`
               : ''
 
+            // Extract genres
+            const genres = item.attributes.tags
+              .filter((tag: any) => tag.attributes.group === "genre")
+              .map((tag: any) => tag.attributes.name?.en || Object.values(tag.attributes.name)[0])
+              .filter(Boolean)
+
             return (
               <MangaCard
                 key={item.id}
                 id={item.id}
                 title={title}
-                slug={mangaSlug}
                 posterUrl={posterUrl}
                 coverUrl={coverUrl}
                 description={description}
                 status={item.attributes.status}
                 year={item.attributes.year}
                 contentRating={item.attributes.contentRating}
-                useMangaDxId={true} // Use MangaDx ID for routing
+                genres={genres}
               />
             )
           })}
