@@ -192,18 +192,16 @@ export async function getMangaDxChapters(mangaId: string, limit = 100, offset = 
   const params = {
     limit: limit.toString(),
     offset: offset.toString(),
-    manga: [mangaId], // This will now be correctly formatted as manga=id1,id2
-    translatedLanguage: [translatedLanguage], // This will continue to be formatted as translatedLanguage[]=en
-    order: { volume: "asc", chapter: "asc" }, // Correct order: first by volume, then by chapter
+    translatedLanguage: [translatedLanguage],
+    order: { volume: "asc", chapter: "asc" },
   }
   const queryString = formatMangaDxQueryParams(params)
 
-  const response = await fetch(`/api/proxy/mangadx/chapter?${queryString}`)
+  const response = await fetch(`/api/proxy/mangadx/manga/${mangaId}/feed?${queryString}`)
   return response.json() as Promise<ChapterList>
 }
 
 export async function getMangaDxChapter(id: string) {
-  // The includes for chapter endpoint is simpler, can be done directly
   const response = await fetch(`/api/proxy/mangadx/chapter/${id}?includes[]=scanlation_group`)
   return response.json()
 }
@@ -247,7 +245,7 @@ export async function getLatestUpdates(limit = 20, offset = 0) {
     offset: offset.toString(),
     includes: ["cover_art", "manga"],
     contentRating: ["safe", "suggestive", "erotica"],
-    order: { updatedAt: "desc" }, // Correct order parameter for latest updates
+    order: { updatedAt: "desc" },
   }
   const queryString = formatMangaDxQueryParams(params)
 

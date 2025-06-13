@@ -105,7 +105,7 @@ function ChapterList({ chapters, mangaSlug, mangaTitle }: { chapters: Chapter[];
         {chapters.slice(0, visibleChapters).map(chapter => (
           <div key={chapter.id} className="flex items-center gap-3 p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition-colors">
             <Button variant="outline" asChild className="flex-1 justify-start border-gray-700 hover:bg-gray-800 hover:border-red-500">
-              <Link href={`/reader/${mangaSlug}/${chapter.id}`}>
+              <Link href={`/reader/${mangaSlug}/1?chapter=${chapter.id}`}>
                 <BookOpen className="w-4 h-4 mr-2" />
                 <span className="truncate">Chapter {chapter.attributes.chapter}: {chapter.attributes.title || 'No title'}</span>
               </Link>
@@ -136,7 +136,7 @@ function ChapterList({ chapters, mangaSlug, mangaTitle }: { chapters: Chapter[];
 
 export default function MangaDetails({ kitsuManga, chapters, mangaSlug }: MangaDetailsProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const firstChapterId = chapters[0]?.id
+  const firstChapter = chapters[0]
   
   const { isBookmarked, isLoading: isBookmarkLoading, toggleBookmark } = useBookmark(mangaSlug)
   
@@ -205,9 +205,9 @@ export default function MangaDetails({ kitsuManga, chapters, mangaSlug }: MangaD
       <div className="space-y-6">
         <div className="flex flex-wrap gap-3">
           <div className="flex gap-3">
-            {firstChapterId && (
+            {firstChapter && (
               <Button asChild size="lg" className="bg-red-600 hover:bg-red-700 text-white shadow-lg">
-                <Link href={`/reader/${mangaSlug}/${firstChapterId}`}>
+                <Link href={`/reader/${mangaSlug}/1?chapter=${firstChapter.id}`}>
                   <BookOpen className="w-5 h-5 mr-2" />
                   Start Reading
                 </Link>
